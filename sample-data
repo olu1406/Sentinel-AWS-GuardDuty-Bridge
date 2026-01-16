@@ -1,0 +1,61 @@
+{
+  "id": "e0b57022132512345678901234567890",
+  "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+  "severity": 8.0,
+  "createdAt": "2024-05-20T12:00:00Z",
+  "updatedAt": "2024-05-20T12:15:00Z",
+  "title": "SSH Brute Force detected",
+  "description": "EC2 instance is behaving in a way that indicates it is under attack.",
+  "accountId": "123456789012",
+  "region": "us-east-1",
+  "partition": "aws",
+  "service": {
+    "serviceName": "guardduty",
+    "detectorId": "d1234567890123456789012345678901",
+    "action": {
+      "actionType": "NETWORK_CONNECTION",
+      "networkConnectionAction": {
+        "connectionDirection": "INBOUND",
+        "protocol": "TCP",
+        "remoteIpDetails": {
+          "ipAddressV4": "198.51.100.2",
+          "organization": { "asn": "12345", "asnOrg": "BadActor Corp" },
+          "country": { "countryName": "Unknown" },
+          "geoLocation": "37.7749,-122.4194"
+        },
+        "remotePortDetails": { "port": 42212, "portName": "Unknown" },
+        "localIpDetails": { "ipAddressV4": "10.0.0.5" },
+        "localPortDetails": { "port": 22, "portName": "SSH" }
+      },
+      "awsApiCallAction": {
+        "api": "ConsoleLogin",
+        "serviceName": "iam",
+        "callerType": "RemoteIP",
+        "errorCode": "403",
+        "userAgent": "Mozilla/5.0",
+        "remoteIpDetails": {
+            "ipAddressV4": "198.51.100.55",
+            "organization": { "asn": "12345", "asnOrg": "BadActor Corp" },
+            "country": { "countryName": "Unknown" }
+        },
+        "affectedResources": {
+            "AWS::IAM::User": "AdminUser",
+            "AWS::IAM::AccessKey": "AKIAIOSFODNN7EXAMPLE"
+        }
+      }
+    }
+  },
+  "resource": {
+    "resourceType": "Instance",
+    "resourceArn": "arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0",
+    "instanceDetails": {
+      "instanceId": "i-1234567890abcdef0",
+      "networkInterfaces": [
+        {
+          "vpcId": "vpc-12345678",
+          "subnetId": "subnet-87654321"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+// Function Alias: AWSGuardDuty_Network
+// Purpose: Extracts IP, Port, and Protocol for Network findings.
+// Dependency: AWSGuardDuty_Main (current version; does NOT output gd)
+
+let AWSGuardDuty_Network = (lookback: timespan = 7d) {
+    AWSGuardDuty_Main(lookback)
+    | where ServiceActionType =~ "NETWORK_CONNECTION"
+
+    // Parse once after filtering
+    | extend gd = parse_json(RawJson)
+    | extend nca = gd.service.action.networkConnectionAction
+
+    // Safe networkInterfaces[0]
+    | extend ni0 = iif(array_length(gd.resource.instanceDetails.networkInterfaces) > 0,
+                       gd.resource.instanceDetails.networkInterfaces[0],
+                       dynamic(null))
+
+    | extend
+        RemoteIp       = tostring(nca.remoteIpDetails.ipAddressV4),
+        RemoteOrg      = tostring(nca.remoteIpDetails.organization.asnOrg),
+        RemoteAsn      = tostring(nca.remoteIpDetails.organization.asn),
+        RemoteGeo      = tostring(nca.remoteIpDetails.geoLocation),
+        RemoteCountry  = tostring(nca.remoteIpDetails.country.countryName),
+        RemotePort     = toint(nca.remotePortDetails.port),
+        RemotePortName = tostring(nca.remotePortDetails.portName),
+
+        LocalIp        = tostring(nca.localIpDetails.ipAddressV4),
+        LocalPort      = toint(nca.localPortDetails.port),
+        LocalPortName  = tostring(nca.localPortDetails.portName),
+
+        Protocol       = tostring(nca.protocol),
+        Direction      = tostring(nca.connectionDirection),
+
+        InstanceId     = tostring(gd.resource.instanceDetails.instanceId),
+        VpcId          = tostring(ni0.vpcId),
+        SubnetId       = tostring(ni0.subnetId)
+
+    | project
+        TimeGenerated, EventTime,
+        FindingId, FindingType, Severity, Title,
+        AwsAccountId, AwsRegion,
+        Direction, Protocol,
+        LocalIp, LocalPort, LocalPortName,
+        RemoteIp, RemotePort, RemotePortName,
+        RemoteOrg, RemoteAsn, RemoteCountry, RemoteGeo,
+        InstanceId, VpcId, SubnetId,
+        RawJson
+};
+
+AWSGuardDuty_Network

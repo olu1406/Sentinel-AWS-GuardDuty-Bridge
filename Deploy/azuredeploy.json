@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace name (used by Microsoft Sentinel)."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region for savedSearches. Prefer same region as workspace."
+      }
+    },
+    "category": {
+      "type": "string",
+      "defaultValue": "Parsers",
+      "metadata": {
+        "description": "SavedSearch category name in the workspace."
+      }
+    },
+    "guardDutyTable": {
+      "type": "string",
+      "defaultValue": "GuardDuty_CL",
+      "metadata": {
+        "description": "Source table name where GuardDuty findings are stored."
+      }
+    },
+    "rawColumn": {
+      "type": "string",
+      "defaultValue": "RawData",
+      "metadata": {
+        "description": "Column containing raw GuardDuty JSON (string)."
+      }
+    },
+    "parserNameMain": {
+      "type": "string",
+      "defaultValue": "AWSGuardDuty_Main",
+      "metadata": {
+        "description": "Name of the Saved Search / function for the main parser."
+      }
+    },
+    "parserNameNetwork": {
+      "type": "string",
+      "defaultValue": "AWSGuardDuty_Network",
+      "metadata": {
+        "description": "Name of the Saved Search / function for the network parser."
+      }
+    },
+    "parserNameIam": {
+      "type": "string",
+      "defaultValue": "AWSGuardDuty_IAM",
+      "metadata": {
+        "description": "Name of the Saved Search / function for the IAM parser."
+      }
+    }
+  },
+  "variables": {
+    "kqlHeader": "[concat('let GuardDutyTable = \"', parameters('guardDutyTable'), '\"; let RawColumn = \"', parameters('rawColumn'), '\"; ')]",
+    
+    "kqlMainBody": "[concat(variables('kqlHeader'), 'let AWSGuardDuty_Main = (lookback: timespan = 7d) { table(GuardDutyTable) | where TimeGenerated >= ago(lookback) | extend _raw = tostring(column_ifexists(RawColumn, \"\")) | where isnotempty(_raw) | extend gd = parse_json(_raw) | extend FindingId=tostring(gd.id), FindingType=tostring(gd.type), Severity=todouble(gd.severity), CreatedAt=todatetime(gd.createdAt), UpdatedAt=todatetime(gd.updatedAt), Title=tostring(gd.title), Description=tostring(gd.description), AwsAccountId=tostring(gd.accountId), AwsRegion=tostring(gd.region), Partition=tostring(gd.partition), ServiceName=tostring(gd.service.serviceName), DetectorId=tostring(gd.service.detectorId), ServiceActionType=tostring(gd.service.action.actionType), ResourceType=tostring(gd.resource.resourceType), ResourceArn=tostring(gd.resource.resourceArn), RawJson=_raw | extend EventTime=coalesce(CreatedAt, TimeGenerated) | where isnotempty(FindingId) or isnotempty(FindingType) | project TimeGenerated, EventTime, FindingId, FindingType, Severity, Title, Description, AwsAccountId, AwsRegion, Partition, CreatedAt, UpdatedAt, ServiceName, DetectorId, ServiceActionType, ResourceType, ResourceArn, RawJson }; AWSGuardDuty_Main')]",
+
+    "kqlNetworkBody": "[concat(variables('kqlHeader'), 'let AWSGuardDuty_Network = (lookback: timespan = 7d) { table(GuardDutyTable) | where TimeGenerated >= ago(lookback) | extend _raw = tostring(column_ifexists(RawColumn, \"\")) | where isnotempty(_raw) | extend gd = parse_json(_raw) | extend ActionType=tostring(gd.service.action.actionType) | where ActionType =~ \"NETWORK_CONNECTION\" | extend nca = gd.service.action.networkConnectionAction | extend ni0 = iif(array_length(gd.resource.instanceDetails.networkInterfaces) > 0, gd.resource.instanceDetails.networkInterfaces[0], dynamic(null)) | extend RemoteIp=tostring(nca.remoteIpDetails.ipAddressV4), RemoteAsn=tostring(nca.remoteIpDetails.organization.asn), RemoteOrg=tostring(nca.remoteIpDetails.organization.asnOrg), RemoteCountry=tostring(nca.remoteIpDetails.country.countryName), RemotePort=toint(nca.remotePortDetails.port), RemotePortName=tostring(nca.remotePortDetails.portName), LocalIp=tostring(nca.localIpDetails.ipAddressV4), LocalPort=toint(nca.localPortDetails.port), LocalPortName=tostring(nca.localPortDetails.portName), Protocol=tostring(nca.protocol), Direction=tostring(nca.connectionDirection), InstanceId=tostring(gd.resource.instanceDetails.instanceId), VpcId=tostring(ni0.vpcId), SubnetId=tostring(ni0.subnetId) | extend FindingId=tostring(gd.id), FindingType=tostring(gd.type), Severity=todouble(gd.severity), Title=tostring(gd.title), AwsAccountId=tostring(gd.accountId), AwsRegion=tostring(gd.region), EventTime=coalesce(todatetime(gd.createdAt), TimeGenerated), RawJson=_raw | project TimeGenerated, EventTime, FindingId, FindingType, Severity, Title, AwsAccountId, AwsRegion, Direction, Protocol, LocalIp, LocalPort, LocalPortName, RemoteIp, RemotePort, RemotePortName, RemoteOrg, RemoteAsn, RemoteCountry, InstanceId, VpcId, SubnetId, RawJson }; AWSGuardDuty_Network')]",
+
+    "kqlIamBody": "[concat(variables('kqlHeader'), 'let AWSGuardDuty_IAM = (lookback: timespan = 7d) { table(GuardDutyTable) | where TimeGenerated >= ago(lookback) | extend _raw = tostring(column_ifexists(RawColumn, \"\")) | where isnotempty(_raw) | extend gd = parse_json(_raw) | extend ActionType=tostring(gd.service.action.actionType) | where ActionType =~ \"AWS_API_CALL\" | extend api = gd.service.action.awsApiCallAction | extend ak = gd.resource.accessKeyDetails | extend ApiServiceName=tostring(api.serviceName), ApiName=tostring(api.api), ApiCallerType=tostring(api.callerType), ApiErrorCode=tostring(api.errorCode), ApiUserAgent=tostring(api.userAgent), ApiRegion=tostring(api.region), RemoteIp=tostring(api.remoteIpDetails.ipAddressV4), RemoteOrg=tostring(api.remoteIpDetails.organization.asnOrg), RemoteAsn=tostring(api.remoteIpDetails.organization.asn), RemoteCountry=tostring(api.remoteIpDetails.country.countryName), UserName=tostring(ak.userName), UserType=tostring(ak.userType), PrincipalId=tostring(ak.principalId), AccessKeyId=tostring(ak.accessKeyId) | extend FindingId=tostring(gd.id), FindingType=tostring(gd.type), Severity=todouble(gd.severity), Title=tostring(gd.title), AwsAccountId=tostring(gd.accountId), AwsRegion=tostring(gd.region), EventTime=coalesce(todatetime(gd.createdAt), TimeGenerated), RawJson=_raw | project TimeGenerated, EventTime, FindingId, FindingType, Severity, Title, AwsAccountId, AwsRegion, ApiServiceName, ApiName, ApiCallerType, ApiErrorCode, ApiUserAgent, ApiRegion, RemoteIp, RemoteOrg, RemoteAsn, RemoteCountry, UserName, UserType, PrincipalId, AccessKeyId, RawJson }; AWSGuardDuty_IAM')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/savedSearches",
+      "apiVersion": "2020-08-01",
+      "name": "[concat(parameters('workspaceName'), '/', parameters('parserNameMain'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "etag": "*",
+        "displayName": "[parameters('parserNameMain')]",
+        "category": "[parameters('category')]",
+        "functionAlias": "[parameters('parserNameMain')]",
+        "query": "[variables('kqlMainBody')]",
+        "version": 2
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/savedSearches",
+      "apiVersion": "2020-08-01",
+      "name": "[concat(parameters('workspaceName'), '/', parameters('parserNameNetwork'))]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces/savedSearches', parameters('workspaceName'), parameters('parserNameMain'))]"
+      ],
+      "properties": {
+        "etag": "*",
+        "displayName": "[parameters('parserNameNetwork')]",
+        "category": "[parameters('category')]",
+        "functionAlias": "[parameters('parserNameNetwork')]",
+        "query": "[variables('kqlNetworkBody')]",
+        "version": 2
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/savedSearches",
+      "apiVersion": "2020-08-01",
+      "name": "[concat(parameters('workspaceName'), '/', parameters('parserNameIam'))]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces/savedSearches', parameters('workspaceName'), parameters('parserNameMain'))]"
+      ],
+      "properties": {
+        "etag": "*",
+        "displayName": "[parameters('parserNameIam')]",
+        "category": "[parameters('category')]",
+        "functionAlias": "[parameters('parserNameIam')]",
+        "query": "[variables('kqlIamBody')]",
+        "version": 2
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+// Parsers/AWSGuardDuty_Main.kql
+//
+// Base parser for AWS GuardDuty findings in Microsoft Sentinel.
+// Assumes findings land in a Log Analytics table:
+//
+//   Table: GuardDuty_CL
+//   JSON column: RawData (string)
+//
+// If your table/column differs, update GuardDutyTable and RawColumn.
+
+let GuardDutyTable = "GuardDuty_CL";
+let RawColumn      = "RawData";
+
+let AWSGuardDuty_Main = (lookback: timespan = 7d) {
+    table(GuardDutyTable)
+    | where TimeGenerated >= ago(lookback)
+    | extend _raw = tostring(column_ifexists(RawColumn, ""))
+    | where isnotempty(_raw)
+    | extend gd = parse_json(_raw)
+
+    // Core finding fields
+    | extend
+        FindingId    = tostring(gd.id),
+        FindingType  = tostring(gd.type),
+        Severity     = todouble(gd.severity),
+        CreatedAt    = todatetime(gd.createdAt),
+        UpdatedAt    = todatetime(gd.updatedAt),
+        Title        = tostring(gd.title),
+        Description  = tostring(gd.description),
+        AwsAccountId = tostring(gd.accountId),
+        AwsRegion    = tostring(gd.region),
+        Partition    = tostring(gd.partition)
+
+    // Service fields
+    | extend
+        ServiceName       = tostring(gd.service.serviceName),
+        DetectorId        = tostring(gd.service.detectorId),
+        ServiceActionType = tostring(gd.service.action.actionType)
+
+    // Resource fields
+    | extend
+        ResourceType = tostring(gd.resource.resourceType),
+        ResourceArn  = tostring(gd.resource.resourceArn)
+
+    // Keep raw JSON for traceability
+    | extend
+        RawJson   = _raw,
+        EventTime = coalesce(CreatedAt, TimeGenerated)
+
+    | where isnotempty(FindingId) or isnotempty(FindingType)
+
+    | project
+        TimeGenerated,
+        EventTime,
+        FindingId,
+        FindingType,
+        Severity,
+        Title,
+        Description,
+        AwsAccountId,
+        AwsRegion,
+        Partition,
+        CreatedAt,
+        UpdatedAt,
+        ServiceName,
+        DetectorId,
+        ServiceActionType,
+        ResourceType,
+        ResourceArn,
+        RawJson
+};
+
+AWSGuardDuty_Main

@@ -1,0 +1,12 @@
+// Parsers/AWSGuardDuty_Config.kql
+let AWSGuardDuty_Config = datatable(
+    TableName: string,
+    RawColumn: string,
+    DefaultLookback: string
+)
+[
+    "GuardDuty_CL",      // TableName: Your actual Log Analytics table name
+    "RawData",           // RawColumn: The column containing the AWS JSON blob
+    "7d"                 // DefaultLookback: Time window (keep as string, e.g. "7d", "24h")
+];
+AWSGuardDuty_Config

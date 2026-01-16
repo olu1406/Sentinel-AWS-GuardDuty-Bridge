@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate ARM template JSON
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("Deploy/azuredeploy.json")
+          data = json.loads(p.read_text(encoding="utf-8"))
+          assert data.get("$schema"), "Missing $schema"
+          assert "resources" in data and isinstance(data["resources"], list), "Missing resources"
+          print("OK: Deploy/azuredeploy.json valid.")
+          PY
+
+      - name: Validate sample JSON
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("sample-data/GuardDuty_Finding.json")
+          data = json.loads(p.read_text(encoding="utf-8"))
+          required = ["id","type","severity","createdAt","updatedAt","accountId","region","service"]
+          for k in required:
+            assert k in data, f"Missing key: {k}"
+          print("OK: sample-data/GuardDuty_Finding.json contains expected keys.")
+          PY
+
+      - name: Ensure parser files exist
+        run: |
+          test -f Parsers/AWSGuardDuty_Config.kql
+          test -f Parsers/AWSGuardDuty_Main.kql
+          test -f Parsers/AWSGuardDuty_Network.kql
+          test -f Parsers/AWSGuardDuty_IAM.kql
+          echo "OK: Parsers exist."

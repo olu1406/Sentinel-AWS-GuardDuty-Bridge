@@ -1,0 +1,53 @@
+// Function Alias: AWSGuardDuty_IAM
+// Purpose: Extracts User, Role, and API details for IAM/API findings.
+// Dependency: AWSGuardDuty_Main
+
+let AWSGuardDuty_IAM = (lookback: timespan = 7d) {
+    AWSGuardDuty_Main(lookback)
+    // 1. Filter First (Performance Optimization)
+    | where ServiceActionType =~ "AWS_API_CALL"
+
+    // 2. Parse JSON (Required since Main doesn't output 'gd')
+    | extend gd = parse_json(RawJson)
+    | extend api = gd.service.action.awsApiCallAction
+    
+    // 3. Extract Identity (Corrected Logic)
+    // GuardDuty places the "Actor" in resource.accessKeyDetails
+    | extend ak = gd.resource.accessKeyDetails 
+
+    // 4. API Details
+    | extend 
+        ApiServiceName = tostring(api.serviceName),
+        ApiName        = tostring(api.api),
+        ApiCallerType  = tostring(api.callerType),
+        ApiErrorCode   = tostring(api.errorCode), // 'errorCode' is the standard field name
+        ApiUserAgent   = tostring(api.userAgent),
+        ApiRegion      = tostring(api.region)
+
+    // 5. Remote Source
+    | extend 
+        RemoteIp       = tostring(api.remoteIpDetails.ipAddressV4),
+        RemoteOrg      = tostring(api.remoteIpDetails.organization.asnOrg),
+        RemoteAsn      = tostring(api.remoteIpDetails.organization.asn),
+        RemoteCountry  = tostring(api.remoteIpDetails.country.countryName)
+
+    // 6. Identity Details (From AccessKeyDetails)
+    | extend 
+        UserName       = tostring(ak.userName),
+        UserType       = tostring(ak.userType),
+        PrincipalId    = tostring(ak.principalId),
+        AccessKeyId    = tostring(ak.accessKeyId)
+
+    // 7. Output
+    | project
+        TimeGenerated, EventTime,
+        FindingId, FindingType, Severity, Title,
+        AwsAccountId, AwsRegion,
+        ApiServiceName, ApiName, ApiCallerType, ApiErrorCode, 
+        ApiUserAgent, ApiRegion,
+        RemoteIp, RemoteOrg, RemoteAsn, RemoteCountry,
+        UserName, UserType, PrincipalId, AccessKeyId,
+        RawJson
+};
+
+AWSGuardDuty_IAM
