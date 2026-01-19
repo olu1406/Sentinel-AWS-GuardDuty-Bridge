@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate ARM template JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("Deploy/azuredeploy.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if "$schema" not in data:
+              raise SystemExit("Missing $schema in Deploy/azuredeploy.json")
+          if not isinstance(data.get("resources"), list):
+              raise SystemExit("Missing or invalid resources array in Deploy/azuredeploy.json")
+          print("OK: Deploy/azuredeploy.json parsed.")
+          PY
+
+      - name: Run ARM-TTK tests
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+          Install-Module -Name arm-ttk -Scope CurrentUser -Force
+          Import-Module arm-ttk
+          Test-AzTemplate -TemplatePath "Deploy/azuredeploy.json"
+
+      - name: Ensure parser files exist and have correct encoding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          parser_dir = Path("Parsers")
+          files = sorted(parser_dir.glob("*.kql"))
+          if not files:
+              raise SystemExit("No Parsers/*.kql files found")
+
+          bom_issues = []
+          crlf_issues = []
+
+          for path in files:
+              data = path.read_bytes()
+              if data.startswith(b"\xef\xbb\xbf"):
+                  bom_issues.append(str(path))
+              if b"\r\n" in data or b"\r" in data:
+                  crlf_issues.append(str(path))
+
+          if bom_issues:
+              raise SystemExit("UTF-8 BOM detected in: " + ", ".join(bom_issues))
+          if crlf_issues:
+              raise SystemExit("CRLF/CR line endings detected in: " + ", ".join(crlf_issues))
+
+          print(f"OK: {len(files)} parser files checked.")
+          PY
