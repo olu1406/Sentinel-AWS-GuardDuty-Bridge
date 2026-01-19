@@ -1,8 +1,8 @@
 # Sentinel-AWS-GuardDuty-Bridge
-# The Cloud Bridge: AWS GuardDuty to Microsoft Sentinel
+## The Cloud Bridge: AWS GuardDuty to Microsoft Sentinel
 
 ## Overview
-This repository provides **ASIM-compliant parsers** that normalize AWS GuardDuty findings for Microsoft Sentinel. 
+This repository provides **ASIM-compliant parsers** that normalize AWS GuardDuty findings for Microsoft Sentinel.
 
 ### Why this matters
 In a multi-cloud SOC, analysts shouldn't have to learn different schemas for different clouds. By mapping GuardDuty to the **Advanced Security Information Model (ASIM)**, you can:
@@ -25,32 +25,35 @@ az deployment group create \
   --resource-group <RG_NAME> \
   --template-file Deploy/azuredeploy.json \
   --parameters workspaceName=<WORKSPACE_NAME>
+```
 
-  How to Use
+## How to Use
 Once deployed, you can query your AWS data using the normalized aliases.
 
-1. Network Findings (SSH Brute Force, etc.)
-Code snippet
+### Network Findings (SSH Brute Force, etc.)
 
+```kusto
 AWSGuardDuty_Network
 | where Severity >= 5.0
 | summarize Count=count() by RemoteIp, Direction
-2. Identity Findings (Suspicious Logins)
-Code snippet
+```
 
+### Identity Findings (Suspicious Logins)
+```kusto
 AWSGuardDuty_IAM
 | where EventResult == "Failure"
 | project TimeGenerated, UserName, ApiName, RemoteIp
-Configuration
+```
+
+## Configuration
 If your Log Analytics table is not named GuardDuty_CL, follow these steps:
 
-Go to Sentinel > Logs.
+1. Go to Sentinel > Logs.
+2. Search for the function `AWSGuardDuty_Config`.
+3. Edit the function code to match your table name:
 
-Search for the function AWSGuardDuty_Config.
-
-Edit the function code to match your table name:
-
-Code snippet
-
+```kusto
 print TableName = "YourCustomTable_CL", ...
-Click Save. All parsers will update automatically.
+```
+
+4. Click Save. All parsers will update automatically.
